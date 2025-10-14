@@ -1,3 +1,6 @@
+// FIX: Import React to use React.ComponentType
+import React from 'react';
+
 export enum UserLevel {
   Debutant = 'Débutant',
   Moyen = 'Moyen',
@@ -12,6 +15,24 @@ export enum Subject {
   Reseau = 'Réseau',
   Systeme = "Système d'exploitation",
   BDD = 'Base de données',
+}
+
+export enum MasteryLevel {
+  NotStarted = 'Non commencé',
+  InProgress = 'En cours',
+  Completed = 'Terminé',
+  Mastered = 'Maîtrisé',
+}
+
+export interface Topic {
+  id: string;
+  name: string;
+  mastery: MasteryLevel;
+}
+
+export interface SubjectProgress {
+  subject: Subject;
+  topics: Topic[];
 }
 
 export interface ProgressPoint {

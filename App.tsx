@@ -1,9 +1,9 @@
 import React, { useState, useCallback, useMemo, useEffect, createContext, useContext } from 'react';
-import { UserLevel, Subject, ProgressPoint, Tool, HelpResource, UserDocument } from './types';
+import { UserLevel, Subject, ProgressPoint, Tool, HelpResource, UserDocument, MasteryLevel, Topic, SubjectProgress } from './types';
 import { generateStudyNote } from './services/geminiService';
 import * as dbService from './services/dbService';
 import ProgressChart from './components/ProgressChart';
-import { ALL_SUBJECTS, SUBJECT_COLORS, USEFUL_TOOLS, HELP_RESOURCES } from './constants';
+import { ALL_SUBJECTS, SUBJECT_COLORS, USEFUL_TOOLS, HELP_RESOURCES, SUBJECT_TOPICS, MASTERY_LEVEL_COLORS } from './constants';
 import { 
   BookOpenIcon, 
   ChartBarIcon, 
@@ -20,7 +20,7 @@ import {
   ArrowTopRightOnSquareIcon
 } from './components/icons';
 
-type View = 'level-select' | 'dashboard' | 'subject' | 'tools' | 'help' | 'documents';
+type View = 'level-select' | 'dashboard' | 'subject-progress' | 'subject' | 'tools' | 'help' | 'documents';
 type Theme = 'light' | 'dark';
 
 interface DisplayUserDocument extends Omit<UserDocument, 'file'> {
@@ -239,9 +239,18 @@ const Header: React.FC<{ userLevel: UserLevel; userXp: number; onViewChange: (vi
   );
 };
 
-const Dashboard: React.FC<{ onSelectSubject: (subject: Subject) => void, userLevel: UserLevel, userXp: number, theme: Theme }> = ({ onSelectSubject, userLevel, userXp, theme }) => {
+const Dashboard: React.FC<{ onSelectSubject: (subject: Subject) => void, userLevel: UserLevel, userXp: number, theme: Theme, progressData: SubjectProgress[] }> = ({ onSelectSubject, userLevel, userXp, theme, progressData }) => {
   const level = Math.floor(userXp / 100);
   const xpForNextLevel = 100 - (userXp % 100);
+
+  const getSubjectProgress = (subject: Subject) => {
+    const subjectData = progressData.find(p => p.subject === subject);
+    if (!subjectData || subjectData.topics.length === 0) return { percent: 0, text: "0% Maîtrisé" };
+
+    const masteredCount = subjectData.topics.filter(t => t.mastery === MasteryLevel.Mastered).length;
+    const percent = Math.round((masteredCount / subjectData.topics.length) * 100);
+    return { percent, text: `${percent}% Maîtrisé` };
+  };
 
   return (
     <div className="p-8">
@@ -277,10 +286,20 @@ const Dashboard: React.FC<{ onSelectSubject: (subject: Subject) => void, userLev
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {ALL_SUBJECTS.map(subject => {
             const colors = SUBJECT_COLORS[subject];
+            const progress = getSubjectProgress(subject);
             return (
               <button key={subject} onClick={() => onSelectSubject(subject)} className={`p-6 rounded-2xl ${colors.bg} border ${colors.border} hover:scale-105 hover:shadow-2xl hover:shadow-purple-500/10 transition-all duration-300 text-left`}>
                 <h3 className={`text-2xl font-bold ${colors.text}`}>{subject}</h3>
-                <p className="text-slate-500 dark:text-slate-400 mt-2">Commencer une nouvelle leçon sur {subject.toLowerCase()}.</p>
+                <p className="text-slate-500 dark:text-slate-400 mt-2">Approfondissez vos connaissances en {subject.toLowerCase()}.</p>
+                 <div className="mt-4">
+                  <div className="flex justify-between items-center mb-1">
+                    <span className={`text-sm font-semibold ${colors.text}`}>Progression</span>
+                    <span className={`text-sm font-bold ${colors.text}`}>{progress.text}</span>
+                  </div>
+                  <div className="w-full bg-slate-300/50 dark:bg-slate-700/50 rounded-full h-2">
+                    <div className="bg-purple-500 h-2 rounded-full transition-all duration-500" style={{ width: `${progress.percent}%` }}></div>
+                  </div>
+                </div>
               </button>
             );
           })}
@@ -290,9 +309,63 @@ const Dashboard: React.FC<{ onSelectSubject: (subject: Subject) => void, userLev
   );
 };
 
-const SubjectView: React.FC<{ subject: Subject; note: string | null; isLoading: boolean; onBack: () => void; onComplete: () => void; theme: Theme }> = ({ subject, note, isLoading, onBack, onComplete, theme }) => {
+const SubjectProgressView: React.FC<{
+  subjectProgress: SubjectProgress;
+  onGenerateNote: (topic: Topic) => void;
+  onUpdateMastery: (topicId: string, mastery: MasteryLevel) => void;
+  onBack: () => void;
+}> = ({ subjectProgress, onGenerateNote, onUpdateMastery, onBack }) => {
+  if (!subjectProgress) return null;
+
+  const { subject, topics } = subjectProgress;
+  const colors = SUBJECT_COLORS[subject];
+
+  return (
+    <div className="p-8">
+      <button onClick={onBack} className="flex items-center space-x-2 text-purple-600 dark:text-purple-400 hover:text-purple-500 dark:hover:text-purple-300 mb-8 transition-colors">
+        <ArrowLeftIcon className="w-5 h-5" />
+        <span>Retour au Dashboard</span>
+      </button>
+      <div className={`p-6 rounded-2xl ${colors.bg} border ${colors.border} mb-8`}>
+        <h2 className={`text-4xl font-extrabold ${colors.text}`}>{subject}</h2>
+        <p className="text-slate-500 dark:text-slate-400 mt-2">Suivez votre progression et lancez-vous dans de nouveaux sujets.</p>
+      </div>
+
+      <div className="space-y-4">
+        {topics.map(topic => (
+          <div key={topic.id} className="p-4 bg-white dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl flex items-center justify-between">
+            <div className="flex items-center space-x-4">
+                <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${MASTERY_LEVEL_COLORS[topic.mastery].bg} ${MASTERY_LEVEL_COLORS[topic.mastery].text}`}>
+                    {topic.mastery}
+                </span>
+                <h3 className="text-lg font-bold text-slate-900 dark:text-white">{topic.name}</h3>
+            </div>
+            <div className="flex items-center space-x-2">
+              <select 
+                value={topic.mastery}
+                onChange={(e) => onUpdateMastery(topic.id, e.target.value as MasteryLevel)}
+                className="bg-slate-100 dark:bg-slate-700 border-slate-200 dark:border-slate-600 rounded-md p-2 text-sm focus:ring-purple-500 focus:border-purple-500 transition-colors"
+              >
+                {Object.values(MasteryLevel).map(level => <option key={level} value={level}>{level}</option>)}
+              </select>
+              <button
+                onClick={() => onGenerateNote(topic)}
+                className="bg-purple-600 hover:bg-purple-500 text-white font-bold py-2 px-4 rounded-lg transition-colors duration-300 flex items-center space-x-2"
+              >
+                <BookOpenIcon className="w-4 h-4" />
+                <span>Étudier</span>
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+
+const SubjectView: React.FC<{ subject: Subject; topic: Topic; note: string | null; isLoading: boolean; onBack: () => void; onComplete: (topicId: string) => void; theme: Theme }> = ({ subject, topic, note, isLoading, onBack, onComplete, theme }) => {
     
-    // A more robust way to render the markdown-like content from Gemini
     const renderNoteContent = () => {
         if (!note) return null;
 
@@ -317,7 +390,6 @@ const SubjectView: React.FC<{ subject: Subject; note: string | null; isLoading: 
             if (line.trim().startsWith('```')) {
                 flushList();
                 if (inCodeBlock) {
-                    // End of code block
                     elements.push(
                         <pre key={`code-${i}`} className="!bg-slate-100 dark:!bg-slate-900/70 p-4 rounded-lg font-mono text-sm overflow-x-auto my-4">
                             <code>{codeContent.trim()}</code>
@@ -326,7 +398,6 @@ const SubjectView: React.FC<{ subject: Subject; note: string | null; isLoading: 
                     codeContent = '';
                     inCodeBlock = false;
                 } else {
-                    // Start of code block
                     inCodeBlock = true;
                 }
             } else if (inCodeBlock) {
@@ -344,9 +415,8 @@ const SubjectView: React.FC<{ subject: Subject; note: string | null; isLoading: 
             }
         });
         
-        flushList(); // Flush any remaining list items
+        flushList();
 
-        // In case the note ends with an unclosed code block
         if (inCodeBlock && codeContent) {
             elements.push(
                 <pre key="code-final" className="!bg-slate-100 dark:!bg-slate-900/70 p-4 rounded-lg font-mono text-sm overflow-x-auto my-4">
@@ -362,9 +432,10 @@ const SubjectView: React.FC<{ subject: Subject; note: string | null; isLoading: 
         <div className="p-8">
             <button onClick={onBack} className="flex items-center space-x-2 text-purple-600 dark:text-purple-400 hover:text-purple-500 dark:hover:text-purple-300 mb-8 transition-colors">
                 <ArrowLeftIcon className="w-5 h-5" />
-                <span>Retour aux matières</span>
+                <span>Retour aux sujets de {subject}</span>
             </button>
-            <h2 className="text-4xl font-extrabold text-slate-900 dark:text-white mb-2">Fiche de Révision : <span className="text-purple-500 dark:text-purple-400">{subject}</span></h2>
+            <h2 className="text-4xl font-extrabold text-slate-900 dark:text-white mb-2">Fiche de Révision : <span className="text-purple-500 dark:text-purple-400">{topic.name}</span></h2>
+            <p className="text-lg text-slate-500 dark:text-slate-400">Matière : {subject}</p>
 
             {isLoading && (
                 <div className="flex flex-col items-center justify-center h-96">
@@ -377,8 +448,8 @@ const SubjectView: React.FC<{ subject: Subject; note: string | null; isLoading: 
             {note && !isLoading && (
                 <div className={`prose ${theme === 'dark' ? 'prose-invert' : ''} prose-lg max-w-none bg-white dark:bg-slate-800/50 p-8 rounded-2xl mt-8 border border-slate-200 dark:border-slate-700 transition-colors duration-300`}>
                     {renderNoteContent()}
-                    <button onClick={onComplete} className="mt-8 bg-green-600 hover:bg-green-500 text-white font-bold py-3 px-6 rounded-lg transition-all duration-300 w-full text-lg no-prose">
-                        Marquer comme terminé (+25 XP)
+                    <button onClick={() => onComplete(topic.id)} className="mt-8 bg-green-600 hover:bg-green-500 text-white font-bold py-3 px-6 rounded-lg transition-all duration-300 w-full text-lg no-prose">
+                        J'ai maîtrisé ce sujet ! (+50 XP)
                     </button>
                 </div>
             )}
@@ -531,14 +602,29 @@ function AppContent() {
   const [level, setLevel] = useState<UserLevel | null>(null);
   const [view, setView] = useState<View>('level-select');
   const [selectedSubject, setSelectedSubject] = useState<Subject | null>(null);
+  const [selectedTopic, setSelectedTopic] = useState<Topic | null>(null);
   const [studyNote, setStudyNote] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [userXp, setUserXp] = useState(230);
   const [documents, setDocuments] = useState<DisplayUserDocument[]>([]);
   const [previewingDoc, setPreviewingDoc] = useState<DisplayUserDocument | null>(null);
+  const [progressData, setProgressData] = useState<SubjectProgress[]>([]);
 
-  // Load documents from IndexedDB and manage Object URL lifecycle
+  useEffect(() => {
+    if (level) {
+      const initialProgressData = ALL_SUBJECTS.map(subject => ({
+        subject,
+        topics: SUBJECT_TOPICS[subject].map(topicName => ({
+          id: `${subject}-${topicName.replace(/\s/g, '-')}`,
+          name: topicName,
+          mastery: MasteryLevel.NotStarted,
+        })),
+      }));
+      setProgressData(initialProgressData);
+    }
+  }, [level]);
+
   useEffect(() => {
     let isMounted = true;
     let objectUrls: string[] = [];
@@ -580,29 +666,46 @@ function AppContent() {
     setView('dashboard');
   };
 
-  const handleSelectSubject = useCallback(async (subject: Subject) => {
-    if (!level) return;
+  const handleSelectSubject = (subject: Subject) => {
     setSelectedSubject(subject);
+    setView('subject-progress');
+  };
+
+  const handleUpdateMastery = useCallback((topicId: string, newMastery: MasteryLevel) => {
+    setProgressData(currentProgress => {
+        return currentProgress.map(subjectProgress => ({
+            ...subjectProgress,
+            topics: subjectProgress.topics.map(topic => 
+                topic.id === topicId ? { ...topic, mastery: newMastery } : topic
+            )
+        }));
+    });
+  }, []);
+
+  const handleGenerateNoteForTopic = useCallback(async (topic: Topic) => {
+    if (!level || !selectedSubject) return;
+    setSelectedTopic(topic);
     setView('subject');
     setIsLoading(true);
     setError(null);
     setStudyNote(null);
     try {
-      const note = await generateStudyNote(level, subject);
+      const note = await generateStudyNote(level, selectedSubject, topic.name);
       setStudyNote(note);
     } catch (err) {
       setError('Failed to generate study note.');
     } finally {
       setIsLoading(false);
     }
-  }, [level]);
+  }, [level, selectedSubject]);
 
-  const handleCompleteNote = () => {
-    setUserXp(prevXp => prevXp + 25);
-    setView('dashboard');
-    setSelectedSubject(null);
+  const handleCompleteNote = (topicId: string) => {
+    handleUpdateMastery(topicId, MasteryLevel.Mastered);
+    setUserXp(prevXp => prevXp + 50);
+    setView('subject-progress');
+    setSelectedTopic(null);
     setStudyNote(null);
-  }
+  };
 
   const handleAddDocument = async (file: File) => {
     try {
@@ -651,9 +754,19 @@ function AppContent() {
   const renderContent = () => {
     switch (view) {
       case 'dashboard':
-        return <Dashboard onSelectSubject={handleSelectSubject} userLevel={level!} userXp={userXp} theme={theme} />;
+        return <Dashboard onSelectSubject={handleSelectSubject} userLevel={level!} userXp={userXp} theme={theme} progressData={progressData} />;
+      case 'subject-progress': {
+          const currentSubjectProgress = progressData.find(p => p.subject === selectedSubject);
+          if (!currentSubjectProgress) return null;
+          return <SubjectProgressView
+              subjectProgress={currentSubjectProgress}
+              onGenerateNote={handleGenerateNoteForTopic}
+              onUpdateMastery={handleUpdateMastery}
+              onBack={() => setView('dashboard')}
+          />
+      }
       case 'subject':
-        return <SubjectView subject={selectedSubject!} note={studyNote} isLoading={isLoading} onBack={() => setView('dashboard')} onComplete={handleCompleteNote} theme={theme} />;
+        return <SubjectView subject={selectedSubject!} topic={selectedTopic!} note={studyNote} isLoading={isLoading} onBack={() => setView('subject-progress')} onComplete={handleCompleteNote} theme={theme} />;
       case 'tools':
         return <ToolsView />;
       case 'help':

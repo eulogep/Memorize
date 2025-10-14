@@ -1,5 +1,5 @@
 
-import { Subject, Tool, HelpResource } from './types';
+import { Subject, Tool, HelpResource, MasteryLevel } from './types';
 import { SparklesIcon, WrenchScrewdriverIcon, LifebuoyIcon } from './components/icons';
 
 export const ALL_SUBJECTS: Subject[] = [
@@ -10,6 +10,22 @@ export const ALL_SUBJECTS: Subject[] = [
   Subject.Systeme,
   Subject.BDD,
 ];
+
+export const SUBJECT_TOPICS: { [key in Subject]: string[] } = {
+  [Subject.Python]: ['Variables & Data Types', 'Operators', 'Control Flow (if/else)', 'Loops (for/while)', 'Functions', 'Data Structures (Lists, Dictionaries)'],
+  [Subject.Java]: ['Syntax & Variables', 'Classes & Objects', 'Methods', 'Inheritance', 'Polymorphism', 'Data Structures (Arrays, ArrayLists)'],
+  [Subject.Maths]: ['Algebra Basics', 'Linear Equations', 'Quadratic Equations', 'Functions & Graphs', 'Basic Trigonometry', 'Calculus (Derivatives)'],
+  [Subject.Reseau]: ['OSI Model', 'TCP/IP Protocol Suite', 'IP Addressing & Subnetting', 'Routing Protocols', 'DNS', 'Network Security Basics'],
+  [Subject.Systeme]: ['Processes & Threads', 'Memory Management', 'File Systems', 'Scheduling Algorithms', 'Deadlocks', 'Virtualization'],
+  [Subject.BDD]: ['Relational Model', 'SQL Queries (SELECT, FROM, WHERE)', 'JOIN Operations', 'Normalization (1NF, 2NF, 3NF)', 'Transactions & ACID', 'Indexing'],
+};
+
+export const MASTERY_LEVEL_COLORS: { [key in MasteryLevel]: { bg: string; text: string; } } = {
+    [MasteryLevel.NotStarted]: { bg: 'bg-slate-200 dark:bg-slate-700', text: 'text-slate-600 dark:text-slate-300' },
+    [MasteryLevel.InProgress]: { bg: 'bg-blue-200 dark:bg-blue-900/50', text: 'text-blue-700 dark:text-blue-300' },
+    [MasteryLevel.Completed]: { bg: 'bg-yellow-200 dark:bg-yellow-900/50', text: 'text-yellow-700 dark:text-yellow-300' },
+    [MasteryLevel.Mastered]: { bg: 'bg-green-200 dark:bg-green-900/50', text: 'text-green-700 dark:text-green-300' },
+};
 
 export const SUBJECT_COLORS: { [key in Subject]: { bg: string; text: string; border: string } } = {
   [Subject.Python]: { bg: 'bg-blue-100 dark:bg-blue-900/50', text: 'text-blue-800 dark:text-blue-300', border: 'border-blue-200 dark:border-blue-700' },
